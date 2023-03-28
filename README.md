@@ -25,18 +25,16 @@ threshold = 0.3 # not display the value with absvalue < 0.3
 figure_title = 'A random generated data'
 fig, ax = plot_surface_data_fsLR(data, file_output, threshold = threshold, cmap=cmap, title=figure_title)
 
-# if in png format, you could crop it 
-```
+
+#if in png format, you could crop it 
 from plotting import crop image
 crop_image(file_output)
 ```
 
-![random generaged ](fsLR_32_surf_example.png)
-
-
-you can also fix the range by specifing `vrange`
-
+you can also custom the range by specifing `vrange`
 ```python
 vrange = (-3, 3)
 fig, ax = plot_surface_data_fsLR(data, file_output, threshold = threshold, vrange=vrange, cmap=cmap, title=figure_title)
 ```
+
+![plotting random generated data](fsLR_32_surf_example.png)
