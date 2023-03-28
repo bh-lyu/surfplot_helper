@@ -10,7 +10,7 @@ file_output = 'fsLR_32_surf_example.pdf'
 cmap = 'jet'  # matplotlib compatible colormap
 threshold = 0.3 # not display the value with absvalue < 0.3
 figure_title = 'A random generated data'
-plot_surface_data_fsLR(data, file_output, threshold = threshold, cmap=cmap, title=figure_title)
+plot_surface_data_fsLR(data, file_output, surf_type='inflated',threshold = threshold, cmap=cmap, title=figure_title)
 
 from plotting import crop_image
 crop_image(file_output)

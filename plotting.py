@@ -146,8 +146,6 @@ def extra_surface_data_fsLR(cifti, length = 'full'):
         data_rh = np.zeros(32492)
         vertex_indices_lh = list(cortex_lh.vertex_indices)
         vertex_indices_rh = list(cortex_rh.vertex_indices)
-        #vertex_indices_lh = _get_surface_index('left')
-        #vertex_indices_rh = _get_surface_index('right')
         data_lh[vertex_indices_lh] = data_lh_pure
         data_rh[vertex_indices_rh] = data_rh_pure
     elif length== 'part':
