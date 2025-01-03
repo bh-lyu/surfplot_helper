@@ -1,4 +1,4 @@
-
+import itertools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
@@ -6,93 +6,9 @@ import nibabel as nib
 from nilearn.plotting.surf_plotting import plot_surf_stat_map
 from nilearn.plotting.img_plotting import _get_colorbar_and_data_ranges
 from nilearn.plotting.surf_plotting import _get_ticks_matplotlib, _get_cmap_matplotlib
-import os
 import numpy as np
-from constants import *
-from constants import _fetch_fsLR_32k_surf
-from PIL import Image
-from PyPDF2 import PdfWriter, PdfReader
-
-
-def _crop_image_pil(image_path, top_margin_r=0.25, bottom_margin_r=0.25):
-    """
-    crop the white space margin at the top and bottom of the picture
-    """
-
-    # Open the image
-    im = Image.open(image_path)
-
-    # Get the image size
-    width, height = im.size
-
-    # Crop the image
-    top_margin = int(top_margin_r * height)
-    bottom_margin = int(bottom_margin_r * height)
-    im_cropped = im.crop((0, top_margin, width, height - bottom_margin))
-
-    # Save the cropped image
-    im_cropped.save(image_path)
-
-    # Open the PDF file
-
-def _crop_image_pdf(image_path, top_margin_r=0.25, bottom_margin_r=0.25):
-    
-    reader = PdfReader(image_path)
-    writer = PdfWriter()
-
-    page = reader.pages[0]
-    height = page.mediabox.height
-    page.mediabox.bottom = page.mediabox.bottom + bottom_margin_r * height
-    page.mediabox.top = page.mediabox.top * (1-top_margin_r)
-    
-    writer.add_page(page)
-    with open("cropped.pdf", "wb") as fp:
-        writer.write(fp)
-
-
-    """
-    with open(image_path, 'rb') as f:
-        pdf = PyPDF2.PdfReader(f)
-        # Get the first page of the PDF
-        page = pdf.getPage(0)
-        # Get the first image on the page (assuming there is only one)
-        xObject = page['/Resources']['/XObject'].getObject()
-        image = None
-        for obj in xObject:
-            if xObject[obj]['/Subtype'] == '/Image':
-                image = xObject[obj]
-                break
-        if image:
-            # Get the image dimensions
-            width = image['/Width']
-            height = image['/Height']
-            top_margin = int(top_margin_r * height)
-            bottom_margin = int(bottom_margin_r * height)
-            # Set the cropping rectangle (left, bottom, right, top)
-            crop = [0, bottom_margin, width, height - top_margin]
-            # Apply the crop to the image
-            image.update({
-                '/CropBox': crop,
-                '/PZ': height
-            })
-        # Write the modified PDF to a new file
-        with open('cropped.pdf', 'wb') as outfile:
-            writer = PyPDF2.PdfWriter()
-            writer.addPage(page)
-            writer.write(outfile)
-    
-    # Rename the new file to the original filename (be careful not to overwrite the original file)
-    if os.path.isfile('cropped.pdf'):
-        os.rename('cropped.pdf', image_path)
-    """
-
-def crop_image(image_path, top_margin_r=0.25, bottom_margin_r=0.25):
-    if (image_path.endswith('.png') or image_path.endswith('.jpg') or image_path.endswith('.jpeg')):
-        _crop_image_pil(image_path, top_margin_r, bottom_margin_r)
-    elif image_path.endswith('.pdf'):
-        _crop_image_pdf(image_path, top_margin_r, bottom_margin_r)
-    else:
-        raise ValueError('only support png, jpg, or pdf format')
+from cifti_util import *
+from cifti_util import _fetch_fsLR_32k_surf
 
 
 def extra_surface_data_fsLR(cifti, length = 'full'):
@@ -121,8 +37,13 @@ def extra_surface_data_fsLR(cifti, length = 'full'):
     elif isinstance(cifti, nib.Cifti2Image):
         cii = cifti
         data = cii.get_fdata()
-
     data = data.ravel()
+    
+    # check the data shape
+    if data.shape[0] == 64984:
+        return(data[:32492], data[32492:])
+    if data.shape[0] == 59412:
+        data = np.pad(data, (0, 91282-59412), constant_values=0)
     if data.shape[0] != 91282:
         raise ValueError('the fsLR cifti data must be in 91k .dlabel.nii or ndarray with (91282,) shape')    
     
@@ -154,8 +75,9 @@ def extra_surface_data_fsLR(cifti, length = 'full'):
     return (data_lh, data_rh)
 
 
-def plot_surface_data_fsLR(data, file_output=None, surf_type = 'inflated', title=None, colorbar=True, vrange=None, 
-                        cmap = 'jet',symmetric_cbar="auto", cbar_tick_format='%.2g', threshold=None):
+def plot_surface_data_fsLR(data, file_output=None, surf_type='inflated', title=None, colorbar=True, vrange=None, 
+                           threshold=None, cmap = 'jet', symmetric_cbar="auto", cbar_tick_format='%.2g', threshold_cbar=True,
+                           fontname='Arial', orientation='square'):
     
     """
     nilearn only supports plot one view at a time without consistent colobar
@@ -164,69 +86,95 @@ def plot_surface_data_fsLR(data, file_output=None, surf_type = 'inflated', title
 
     This only support data in the following format
     :data: (1) .dlabel.nii cifti data with 91k density
-           (2) tuple containing (data_lh, data_rh) with 
+            (2) tuple containing (data_lh, data_rh) with 
             data_lh.shape = (29696, ) data_rh.shape=(29716,)
-           (3) np.ndarrya with shape (91282)
-    
     
     """
-
+    # set up the default figure
+    mpl.rcParams['font.family']=fontname
+    
     if isinstance(data, tuple):
         data_lh, data_rh = data
     elif isinstance(data, str) or isinstance(data, np.ndarray):
-        data_lh, data_rh = extra_surface_data_fsLR(data)
-
-    fsLR_32k_surf_L, fsLR_32k_surf_R = _fetch_fsLR_32k_surf(surf_type)
-
-    # set up the default figure
-    mpl.rcParams['font.family']='Arial' #optional
+        data=np.nan_to_num(data)
+        data_lh, data_rh = extra_surface_data_fsLR(data, length='full')
+    fsLR_32k_surf_L, fsLR_32k_surf_R = _fetch_fsLR_32k_surf(surf_type=surf_type)
     
-    _default_figsize = (12,5)
-    fig, axes = plt.subplots(1, 4, figsize=_default_figsize, subplot_kw={'projection': '3d'}) 
-    plt.tight_layout()
+    if threshold is None:
+        threshold = 0.01
+    data_lh[np.abs(data_lh)<threshold]=0
+    data_rh[np.abs(data_rh)<threshold]=0
+    
+    if orientation=='landscape':
+        _default_figsize = (12, 2.5)
+        fig, axes = plt.subplots(1, 4, figsize=_default_figsize, subplot_kw={'projection': '3d'}) 
+        cbar_coord = [0.92, 0.25, 0.02, 0.55]
+        cbar_orient = 'vertical'
+        title_y=0.98
+        
+        # Plot the left and righ hemisphere
+        plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='lateral', bg_map=fsLR_32k_sulc_L ,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0], figure=fig)
+        plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='medial', bg_map=fsLR_32k_sulc_L ,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[1],figure=fig)
+        plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='lateral', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[2],figure=fig)
+        plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='medial', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[3],figure=fig)
+        
+        # reduce viewing distance to remove space around mesh
+        for i in range(4): axes[i].set_box_aspect(None, zoom=1.5)
+        plt.subplots_adjust(left=0.01, bottom=0.01, right=0.9, top=0.99, wspace=0.05, hspace=0)
+        
+    elif orientation=='square':
+        _default_figsize = (5,5)
+        fig, axes = plt.subplots(2, 2, figsize=_default_figsize, subplot_kw={'projection': '3d'}) 
+        cbar_coord = [0.3, 0.04, 0.4, 0.02]
+        cbar_orient = 'horizontal'
+        title_y = 0.98
+        # Plot the left and righ hemisphere
+        plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='lateral', bg_map=fsLR_32k_sulc_L,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0,0], figure=fig)
+        plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='medial', bg_map=fsLR_32k_sulc_L, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0,1],figure=fig)
+        plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='lateral', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[1,0],figure=fig)
+        plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='medial', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[1,1],figure=fig)
+        
+        for i,j in itertools.product(range(2), repeat=2): 
+            axes[i,j].set_box_aspect(None, zoom=1.5)
+        plt.subplots_adjust(left=0.01, bottom=0.01, right=0.99, top=0.99, wspace=0.01, hspace=0)
+    else:
+        raise ValueError('orientation must be landscape(1x4), or square(2x2)')
 
-    # Plot the left hemisphere
-    plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='lateral', bg_map=fsLR_32k_sulc_L ,colorbar=False, threshold=threshold, cmap=cmap, axes=axes[0], figure=fig)
-    plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='medial', bg_map=fsLR_32k_sulc_L ,colorbar=False, threshold=threshold, cmap=cmap, axes=axes[1],figure=fig)
-
-    # Plot the right hemisphere
-    plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='lateral', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold,   cmap=cmap, axes=axes[2],figure=fig)
-    plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='medial', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold,   cmap=cmap, axes=axes[3],figure=fig)
-
-    # reduce viewing distance to remove space around mesh
-    for i in range(4): axes[i].set_box_aspect(None, zoom=1.2)
 
     # Create a shared colorbar
-    if colorbar:
+    if colorbar and np.any(data!=0):
         if isinstance(cmap, str): cmap = plt.get_cmap(cmap)
         if vrange is None: # get the adpated range if not provided with vmax
-            cbar_vmin, cbar_vmax, vmin, vmax = _get_colorbar_and_data_ranges(np.concatenate((data_lh,data_rh)), vmax=None, symmetric_cbar=symmetric_cbar, kwargs={})
+            cbar_vmin, cbar_vmax, vmin, vmax = _get_colorbar_and_data_ranges(np.concatenate((data_lh,data_rh)), vmax=None, symmetric_cbar=symmetric_cbar)
             cbar_vmin = cbar_vmin if cbar_vmin is not None else vmin
             cbar_vmax = cbar_vmax if cbar_vmax is not None else vmax
         else:
             cbar_vmin, cbar_vmax = vrange
         
+        if threshold_cbar:
+            our_cmap, norm = _get_cmap_matplotlib(cmap, cbar_vmin, cbar_vmax, threshold)
+        else:
+            our_cmap, norm = _get_cmap_matplotlib(cmap, cbar_vmin, cbar_vmax)
         ticks = _get_ticks_matplotlib(cbar_vmin, cbar_vmax, cbar_tick_format)
-        our_cmap, norm = _get_cmap_matplotlib(cmap, cbar_vmin, cbar_vmax, threshold)
         bounds = np.linspace(cbar_vmin, cbar_vmax, our_cmap.N)
 
         # we need to create a proxy mappable
         proxy_mappable = ScalarMappable(cmap=our_cmap, norm=norm)
         proxy_mappable.set_array(np.concatenate((data_lh,data_rh)))
-        cax = fig.add_axes([0.94, 0.3, 0.02, 0.4]) # colorbar on the right
+        
+        cax = fig.add_axes(cbar_coord) # colorbar on the right
         #cax, _ = make_axes(axes[3], location='right', fraction=.15, shrink=.5, pad=.0, aspect=10.)
-        fig.colorbar(proxy_mappable, cax=cax, ticks=ticks,boundaries=bounds, spacing='proportional',format=cbar_tick_format, orientation='vertical', shrink= .3)
+        cbar =fig.colorbar(proxy_mappable, cax=cax, ticks=ticks,boundaries=bounds, spacing='proportional',format=cbar_tick_format, orientation=cbar_orient)
+        cbar.ax.tick_params(length=0)
 
-    # adjust the space 
-    plt.subplots_adjust(left=0.01, bottom=0.01, right=0.9, top=0.99, wspace=0.03, hspace=0.03)
-    
     if title is not None:
-        fig.suptitle(title, ha='left', fontsize=12, x=0.01, y=0.75)
+        fig.suptitle(title, ha='center',fontsize=12, x=0.5, y=title_y)
 
     if file_output is None:
         return fig, axes
     else:
-        plt.savefig(file_output)
+        fig.savefig(file_output)
+
         print(f'figure saved at {file_output}')
 
 
