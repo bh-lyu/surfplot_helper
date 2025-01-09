@@ -1,5 +1,5 @@
 import numpy as np
-from plotting import plot_surface_data_fsLR
+from surfplot_helper.plotting import plot_surface_data_fsLR
 
 ############## Example one - plot fsLR_32k surface ############## 
 
@@ -17,9 +17,9 @@ figure_title = 'A random generated data'
 
 ############## Example two - plot kong400 parcellation ############## 
 
-from plotting import plot_Kong_parcellation
+from surfplot_helper.plotting import plot_Kong_parcellation
 
 data = np.random.uniform(low=-3, high=3, size=400)
 cmap = 'nipy_spectral'
 file_output = 'Kong400_random.png'
-plot_Kong_parcellation(data, file_output, cmap= cmap, title='Kong400_random', title_position=200)
+plot_Kong_parcellation(data, file_output, surf_type='inflated', cmap= cmap, title='Kong400_random', title_position=200)
