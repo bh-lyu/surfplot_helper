@@ -43,5 +43,5 @@ plot_Kong_parcellation(data, file_output, surf_type='inflated', cmap= cmap, titl
 <img src="Kong400_random.png" width="500" height="500">
 
 # updates
- - v0.2.0 2024-01-09, add SchaeferKong400 parcellation plot with with workbench handling
- - v0.1.0 2023-03-28, initial submit, only for drawing den-91k .dcalar.nii data in cifti
+ - v0.2.0 2024-01-09, add SchaeferKong400 parcellation plot with with workbench handling.
+ - v0.1.0 2023-03-28, initial submit, only for drawing den-91k .dcalar.nii data in cifti.
