@@ -7,17 +7,42 @@ import matplotlib as mpl
 from matplotlib import font_manager
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
+from concurrent.futures import ThreadPoolExecutor
 from surfplot_helper.wbplot_images import write_parcellated_image # from wb plot images
 from zipfile import ZipFile
 import nibabel as nib
-from nilearn.plotting.surf_plotting import plot_surf_stat_map
-from nilearn.plotting.img_plotting import _get_colorbar_and_data_ranges
-from nilearn.plotting.surf_plotting import _get_ticks_matplotlib, _get_cmap_matplotlib
+from nilearn.plotting.surf_plotting import plot_surf_stat_map, _get_ticks_matplotlib, _get_cmap_matplotlib
+from nilearn.plotting.img_plotting import get_colorbar_and_data_ranges
 #custom functions
 from .utils.cifti_util import *
 from .utils.cifti_util import _fetch_fsLR_32k_surf
 from .utils.plot_util import add_colorbar_png, add_title_png
 
+
+
+def parallel_plot_surf(plot_args, fig, threshold, symmetric_cbar, cmap):
+    """parallel computation"""
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = []
+        for args in plot_args:
+            surf, data, hemi, view, bg_map, ax = args
+            future = executor.submit(
+                plot_surf_stat_map,
+                surf, data,
+                hemi=hemi,
+                view=view,
+                bg_map=bg_map,
+                colorbar=False,
+                threshold=threshold,
+                symmetric_cbar=symmetric_cbar,
+                cmap=cmap,
+                axes=ax,
+                figure=fig
+            )
+            futures.append(future)
+        # wait for all to complete
+        for future in futures:
+            future.result()
 
 
 def plot_surface_data_fsLR(data, file_output=None, surf_type='inflated', title=None, colorbar=True, vrange=None, 
@@ -57,28 +82,50 @@ def plot_surface_data_fsLR(data, file_output=None, surf_type='inflated', title=N
         cbar_coord = [0.92, 0.25, 0.02, 0.55]
         cbar_orient = 'vertical'
         title_y=0.98
-        
+
+        # function parameter for
+        plot_args = [
+            (fsLR_32k_surf_L, data_lh, 'left', 'lateral', fsLR_32k_sulc_L, axes[0]),
+            (fsLR_32k_surf_L, data_lh, 'left', 'medial', fsLR_32k_sulc_L, axes[1]),
+            (fsLR_32k_surf_R, data_rh, 'right', 'lateral', fsLR_32k_sulc_R, axes[2]),
+            (fsLR_32k_surf_R, data_rh, 'right', 'medial', fsLR_32k_sulc_R, axes[3]),
+        ]
+        #manipulate the parallel plottings
+        parallel_plot_surf(plot_args, fig, threshold, symmetric_cbar, cmap)
+
+
         # Plot the left and righ hemisphere
-        plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='lateral', bg_map=fsLR_32k_sulc_L ,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0], figure=fig)
-        plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='medial', bg_map=fsLR_32k_sulc_L ,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[1],figure=fig)
-        plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='lateral', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[2],figure=fig)
-        plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='medial', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[3],figure=fig)
-        
+        # plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='lateral', bg_map=fsLR_32k_sulc_L ,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0], figure=fig)
+        # plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='medial', bg_map=fsLR_32k_sulc_L ,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[1],figure=fig)
+        # plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='lateral', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[2],figure=fig)
+        # plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='medial', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[3],figure=fig)
+        #
         # reduce viewing distance to remove space around mesh
         for i in range(4): axes[i].set_box_aspect(None, zoom=1.5)
         plt.subplots_adjust(left=0.01, bottom=0.01, right=0.9, top=0.99, wspace=0.05, hspace=0)
-        
+
     elif orientation=='square':
         _default_figsize = (5,5)
         fig, axes = plt.subplots(2, 2, figsize=_default_figsize, subplot_kw={'projection': '3d'}) 
         cbar_coord = [0.3, 0.04, 0.4, 0.02]
         cbar_orient = 'horizontal'
         title_y = 0.98
+
+        #
+        plot_args = [
+            (fsLR_32k_surf_L, data_lh, 'left', 'lateral', fsLR_32k_sulc_L, axes[0, 0]),
+            (fsLR_32k_surf_L, data_lh, 'left', 'medial', fsLR_32k_sulc_L, axes[0, 1]),
+            (fsLR_32k_surf_R, data_rh, 'right', 'lateral', fsLR_32k_sulc_R, axes[1, 0]),
+            (fsLR_32k_surf_R, data_rh, 'right', 'medial', fsLR_32k_sulc_R, axes[1, 1]),
+        ]
+
+        parallel_plot_surf(plot_args, fig, threshold, symmetric_cbar, cmap)
+
         # Plot the left and righ hemisphere
-        plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='lateral', bg_map=fsLR_32k_sulc_L,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0,0], figure=fig)
-        plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='medial', bg_map=fsLR_32k_sulc_L, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0,1],figure=fig)
-        plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='lateral', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[1,0],figure=fig)
-        plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='medial', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[1,1],figure=fig)
+        # plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='lateral', bg_map=fsLR_32k_sulc_L,colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0,0], figure=fig)
+        # plot_surf_stat_map(fsLR_32k_surf_L, data_lh, hemi='left', view='medial', bg_map=fsLR_32k_sulc_L, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar, cmap=cmap, axes=axes[0,1],figure=fig)
+        # plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='lateral', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[1,0],figure=fig)
+        # plot_surf_stat_map(fsLR_32k_surf_R, data_rh, hemi='right', view='medial', bg_map=fsLR_32k_sulc_R, colorbar=False, threshold=threshold, symmetric_cbar=symmetric_cbar,  cmap=cmap, axes=axes[1,1],figure=fig)
         
         for i,j in itertools.product(range(2), repeat=2): 
             axes[i,j].set_box_aspect(None, zoom=1.5)
@@ -91,7 +138,7 @@ def plot_surface_data_fsLR(data, file_output=None, surf_type='inflated', title=N
     if colorbar and np.any(data!=0):
         if isinstance(cmap, str): cmap = plt.get_cmap(cmap)
         if vrange is None: # get the adpated range if not provided with vmax
-            cbar_vmin, cbar_vmax, vmin, vmax = _get_colorbar_and_data_ranges(np.concatenate((data_lh,data_rh)), vmax=None, symmetric_cbar=symmetric_cbar)
+            cbar_vmin, cbar_vmax, vmin, vmax = get_colorbar_and_data_ranges(np.concatenate((data_lh,data_rh)), vmax=None, symmetric_cbar=symmetric_cbar)
             cbar_vmin = cbar_vmin if cbar_vmin is not None else vmin
             cbar_vmax = cbar_vmax if cbar_vmax is not None else vmax
         else:
@@ -101,7 +148,7 @@ def plot_surface_data_fsLR(data, file_output=None, surf_type='inflated', title=N
             our_cmap, norm = _get_cmap_matplotlib(cmap, cbar_vmin, cbar_vmax, threshold)
         else:
             our_cmap, norm = _get_cmap_matplotlib(cmap, cbar_vmin, cbar_vmax)
-        ticks = _get_ticks_matplotlib(cbar_vmin, cbar_vmax, cbar_tick_format)
+        ticks = _get_ticks_matplotlib(cbar_vmin, cbar_vmax, cbar_tick_format, threshold=None)
         bounds = np.linspace(cbar_vmin, cbar_vmax, our_cmap.N)
 
         # we need to create a proxy mappable
